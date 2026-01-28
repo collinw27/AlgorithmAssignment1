@@ -1,0 +1,3 @@
+C:/Users/jorda/CLionProjects/AlgorithmAssignment1/cmake-build-debug-visual-studio/CMakeFiles/AlgorithmAssignment1.dir
+C:/Users/jorda/CLionProjects/AlgorithmAssignment1/cmake-build-debug-visual-studio/CMakeFiles/edit_cache.dir
+C:/Users/jorda/CLionProjects/AlgorithmAssignment1/cmake-build-debug-visual-studio/CMakeFiles/rebuild_cache.dir

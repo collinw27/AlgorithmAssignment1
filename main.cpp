@@ -9,6 +9,26 @@
 
 using namespace std;
 
+/*
+ * For testing in terminal:
+ * PowerShell:
+ *  cd .\cmake-build-debug-visual-studio\
+ *  Matching:
+ *   Get-Content ..\example.in | .\AlgorithmAssignment1.exe match > ..\example.out
+ *  Verifying:
+ *   Get-Content ..\example.in, ..\example.out | .\AlgorithmAssignment1.exe verify
+ *
+ * cmd:
+ *  Matching:
+ *   AlgorithmAssignment1.exe match < ..\example.in > ..\example.out
+ *  Verifying:
+ *   copy /b ..\example.in + ..\example.out verify_input.txt
+ *   AlgorithmAssignment1.exe verify < verify_input.txt
+ *
+ * NOTE:
+ *  If using cmd, the .in file must have a newline at the end
+ */
+
 struct Matching
 {
     int hospital;
@@ -37,6 +57,7 @@ static bool isPermutation1toN(const vector<int>& line, int n) {
 }
 
 static bool readInstance(istream& in, Instance& inst, string& err) {
+    //cout << "readInst";
     int n;
     if (!(in >> n)) {
         err = "EMPTY_OR_MISSING_N";
@@ -330,8 +351,78 @@ static vector<pair<int,int>> readMatchingPairs(istream& in) {
     return pairs;
 }
 
+int main(int argc, char** argv) {
+    // arguments
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    string mode = (argc >= 2 ? string(argv[1]) : "match");
+
+    // match mode
+    if (mode == "match") {
+        Instance inst;
+        string err;
+
+        if (!readInstance(cin, inst, err)) {
+            cout << "INVALID: " << err << "\n";
+            return 0;
+        }
+        if (inst.n == 0) return 0;
+
+        MatchingEngine engine(inst.n);
+
+        for (int h = 1; h <= inst.n; h++) {
+            vector<int> prefs;
+            prefs.reserve(inst.n);
+            for (int k = 1; k <= inst.n; k++) prefs.push_back(inst.hospPref[h][k]);
+            engine.set_hospital_preferences(h, prefs);
+        }
+        for (int s = 1; s <= inst.n; s++) {
+            vector<int> prefs;
+            prefs.reserve(inst.n);
+            for (int k = 1; k <= inst.n; k++) prefs.push_back(inst.studPref[s][k]);
+            engine.set_student_preferences(s, prefs);
+        }
+
+        auto [hospToStud, proposals] = engine.solve();
+
+        for (int h = 1; h <= inst.n; h++) {
+            cout << h << " " << hospToStud[h] << "\n";
+        }
+
+        return 0;
+    }
+
+    // verify mode
+    if (mode == "verify") {
+        Instance inst;
+        string err;
+        if (!readInstance(cin, inst, err)) {
+            cout << "INVALID: " << err << "\n";
+            return 0;
+        }
+        auto pairs = readMatchingPairs(cin);
+        cout << verifyMatching(inst, pairs) << "\n";
+        return 0;
+    }
 
 
+    // invalid mode
+    cerr << "Unknown mode: " << mode << "\n";
+    cerr << "PowerShell Usage:\n"
+        << "  Match:\n"
+        << "    Get-Content ..\\example.in | .\\AlgorithmAssignment1.exe match > ..\\example.out\n"
+        << "  Verify:\n"
+        << "    Get-Content .\\example.in, .\\example.out | & .\\cmake-build-debug-visual-studio\\AlgorithmAssignment1.exe verify\n\n"
+        << "cmd Usage:\n"
+        << "  Match:\n"
+        << "    AlgorithmAssignment1.exe match < ..\\example.in > ..\\example.out:\n"
+        << "  Verify:\n"
+        << "    copy /b ..\\example.in + ..\\example.out verify_input.txt:\n"
+        << "    AlgorithmAssignment1.exe verify < verify_input.txt\n\n"
+        ;
+    return 1;
+}
 
 // Hardcoded testing
 /*
