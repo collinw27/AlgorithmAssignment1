@@ -5,56 +5,197 @@
 #include <initializer_list>
 #include <iostream>
 #include <stdexcept>
+#include <deque>
+
+using namespace std;
 
 struct Matching
 {
-    std::string hospital;
-    std::string student;
+    int hospital;
+    int student;
 };
 
+// make vectors for preferences
+struct Instance {
+    int n = 0;
+
+    vector<vector<int>> hospPref;
+    vector<vector<int>> studPref;
+    vector<vector<int>> studRank;
+};
+
+// parsing and validation helpers
+static bool isPermutation1toN(const vector<int>& line, int n) {
+    if ((int)line.size() != n) return false;
+    vector<char> seen(n + 1, 0);
+    for (int v : line) {
+        if (v < 1 || v > n) return false;
+        if (seen[v]) return false;
+        seen[v] = 1;
+    }
+    return true;
+}
+
+static bool readInstance(istream& in, Instance& inst, string& err) {
+    int n;
+    if (!(in >> n)) {
+        err = "EMPTY_OR_MISSING_N";
+        return false;
+    }
+    if (n < 0) {
+        err = "INVALID_N_NEGATIVE";
+        return false;
+    }
+
+    inst.n = n;
+    inst.hospPref.assign(n + 1, vector<int>(n + 1, 0));
+    inst.studPref.assign(n + 1, vector<int>(n + 1, 0));
+    inst.studRank.assign(n + 1, vector<int>(n + 1, 0));
+
+    // Hospitals
+    for (int h = 1; h <= n; h++) {
+        vector<int> line;
+        line.reserve(n);
+        for (int k = 1; k <= n; k++) {
+            int v;
+            if (!(in >> v)) {
+                err = "TRUNCATED_HOSPITAL_PREFS";
+                return false;
+            }
+            inst.hospPref[h][k] = v;
+            line.push_back(v);
+        }
+        if (!isPermutation1toN(line, n)) {
+            err = "INVALID_HOSPITAL_PREF_LINE_" + to_string(h);
+            return false;
+        }
+    }
+
+    // Students
+    for (int s = 1; s <= n; s++) {
+        vector<int> line;
+        line.reserve(n);
+        for (int k = 1; k <= n; k++) {
+            int v;
+            if (!(in >> v)) {
+                err = "TRUNCATED_STUDENT_PREFS";
+                return false;
+            }
+            inst.studPref[s][k] = v;
+            line.push_back(v);
+        }
+        if (!isPermutation1toN(line, n)) {
+            err = "INVALID_STUDENT_PREF_LINE_" + to_string(s);
+            return false;
+        }
+        for (int k = 1; k <= n; k++) {
+            int h = inst.studPref[s][k];
+            inst.studRank[s][h] = k;
+        }
+    }
+
+    return true;
+}
+
+// class for the Matching Engine
 class MatchingEngine
 {
-
     unsigned int count;
-    std::unordered_map<std::string, std::string*> hospitals;
-    std::unordered_map<std::string, std::string*> students;
+    Instance inst;
+    //std::unordered_map<std::string, std::string*> hospitals;
+    //std::unordered_map<std::string, std::string*> students;
     
 public:
 
     // Expected # of hospitals and students must be assigned at creation
 
-    MatchingEngine(unsigned int count)
-    {
-        this->count = count;
+    explicit MatchingEngine(unsigned int count) : count(count) {
+        inst.n = (int)count;
+        inst.hospPref.assign(count + 1, vector<int>(count + 1, 0));
+        inst.studPref.assign(count + 1, vector<int>(count + 1, 0));
+        inst.studRank.assign(count + 1, vector<int>(count + 1, 0));
     }
 
-    void set_hospital_preferences(std::string hospital, std::initializer_list<std::string> preferences)
-    {
-        // Error on redefinition or mismatched list type
+    void set_hospital_preferences(int hospital, const vector<int>& preferences) {
+        if ((unsigned)preferences.size() != count)
+            throw invalid_argument("Incorrect number of preferences (hospital).");
+        if (hospital < 1 || hospital > (int)count)
+            throw invalid_argument("Hospital id out of range.");
+        if (!isPermutation1toN(preferences, (int)count))
+            throw invalid_argument("Hospital preferences must be a permutation of 1..n.");
 
-        if (preferences.size() != count)
-            throw std::invalid_argument("Incorrect number of preferences.");
-        if (hospitals.find(hospital) != hospitals.end())
-            throw std::invalid_argument("Redefinition of hospital.");
-
-        // Copy into array within the map
-
-        std::string* arr = new std::string[count];
-        std::copy(preferences.begin(), preferences.end(), arr);
-        hospitals[hospital] = arr;
+        for (int k = 1; k <= (int)count; k++)
+            inst.hospPref[hospital][k] = preferences[k - 1];
     }
 
-    void set_student_preferences(std::string student, std::initializer_list<std::string> preferences)
-    {
-        if (preferences.size() != count)
-            throw std::invalid_argument("Incorrect number of preferences.");
-        if (students.find(student) != students.end())
-            throw std::invalid_argument("Redefinition of student.");
-        std::string* arr = new std::string[count];
-        std::copy(preferences.begin(), preferences.end(), arr);
-        students[student] = arr;
+    void set_student_preferences(int student, const vector<int>& preferences) {
+        if ((unsigned)preferences.size() != count)
+            throw invalid_argument("Incorrect number of preferences (student).");
+        if (student < 1 || student > (int)count)
+            throw invalid_argument("Student id out of range.");
+        if (!isPermutation1toN(preferences, (int)count))
+            throw invalid_argument("Student preferences must be a permutation of 1..n.");
+
+        for (int k = 1; k <= (int)count; k++) {
+            int h = preferences[k - 1];
+            inst.studPref[student][k] = h;
+            inst.studRank[student][h] = k;
+        }
     }
 
+    // new solve() approach
+    // Returns hospital -> student mapping (1-indexed) and proposal count
+    pair<vector<int>, long long> solve() {
+        deque<int> unmatched_hospitals;
+        vector<int> next_choices(count + 1, 1);     // next proposal index (1..n)
+        vector<int> student_matches(count + 1, 0);  // student -> hospital (0 = free)
+        vector<int> hospital_matches(count + 1, 0); // hospital -> student
+
+        for (int h = 1; h <= (int)count; h++)
+            unmatched_hospitals.push_back(h);
+
+        long long proposals = 0;
+
+        while (!unmatched_hospitals.empty()) {
+            int hospital = unmatched_hospitals.front();
+
+            // Guard against bad input (shouldn’t happen with complete lists)
+            if (next_choices[hospital] > (int)count) {
+                unmatched_hospitals.pop_front();
+                continue;
+            }
+
+            int student = inst.hospPref[hospital][next_choices[hospital]];
+            next_choices[hospital]++;
+            proposals++;
+
+            if (student_matches[student] == 0) {
+                // student free -> match
+                student_matches[student] = hospital;
+                hospital_matches[hospital] = student;
+                unmatched_hospitals.pop_front();
+            } else {
+                int prev_hospital = student_matches[student];
+
+                // student prefers lower rank
+                if (inst.studRank[student][hospital] < inst.studRank[student][prev_hospital]) {
+                    // student switches
+                    student_matches[student] = hospital;
+                    hospital_matches[hospital] = student;
+
+                    hospital_matches[prev_hospital] = 0;
+
+                    unmatched_hospitals.pop_front();
+                    unmatched_hospitals.push_back(prev_hospital);
+                }
+                // else rejected; hospital stays unmatched and tries again later
+            }
+        }
+
+        return {hospital_matches, proposals};
+    }
+
+    /*
     std::vector<Matching>* solve()
     {
         // Make sure there are correct # of hospitals/students
@@ -132,10 +273,16 @@ public:
         }
         return output;
     }
+     */
+
 };
 
 int main()
 {
+
+
+    // Hardcoded testing
+    /*
     MatchingEngine list(3);
     list.set_hospital_preferences("X", {"a", "b", "c"});
     list.set_hospital_preferences("Y", {"a", "b", "c"});
@@ -151,4 +298,5 @@ int main()
     }
 
     return 0;
+     */
 }
