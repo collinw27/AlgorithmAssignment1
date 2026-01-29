@@ -1,32 +1,26 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <unordered_map>
-#include <initializer_list>
 #include <iostream>
 #include <stdexcept>
 #include <deque>
+#include <chrono>
+#include <fstream>
 
 using namespace std;
 
 /*
- * For testing in terminal:
- * PowerShell:
- *  cd .\cmake-build-debug-visual-studio\
- *  Matching:
- *   Get-Content ..\example.in | .\AlgorithmAssignment1.exe match > ..\example.out
- *  Verifying:
- *   Get-Content ..\example.in, ..\example.out | .\AlgorithmAssignment1.exe verify
+ *  For testing in terminal:
+ *  Match mode:
+ *      ex. AlgorithmAssignment1.exe match .\example.in .\example.out
+ *  Verify mode:
+ *      ex. AlgorithmAssignment1.exe verify .\example.in .\example.out
+ * 
+ *  Running without arguments defaults to match with no file inputs
+ *  File arguments can be replaced with * to use terminal for input/output
+ *  TIMED can be added as a final argument to time the code in ns
+ *  (used for scalability testing)
  *
- * cmd:
- *  Matching:
- *   AlgorithmAssignment1.exe match < ..\example.in > ..\example.out
- *  Verifying:
- *   copy /b ..\example.in + ..\example.out verify_input.txt
- *   AlgorithmAssignment1.exe verify < verify_input.txt
- *
- * NOTE:
- *  If using cmd, the .in file must have a newline at the end
  */
 
 struct Matching
@@ -123,8 +117,6 @@ class MatchingEngine
 {
     unsigned int count;
     Instance inst;
-    //std::unordered_map<std::string, std::string*> hospitals;
-    //std::unordered_map<std::string, std::string*> students;
     
 public:
 
@@ -216,86 +208,6 @@ public:
         return {hospital_matches, proposals};
     }
 
-    /*
-    std::vector<Matching>* solve()
-    {
-        // Make sure there are correct # of hospitals/students
-
-        if (hospitals.size() != count || students.size() != count)
-            throw std::invalid_argument("Incorrect number of hospitals/students.");
-
-        // Read in data
-
-        std::vector<std::string> unmatched_hospitals;
-        std::unordered_map<std::string, int> next_choices; // the next student a hospital will choose
-        std::unordered_map<std::string, std::string> student_matches; // maps student -> hospital
-
-        for (auto pair : hospitals)
-        {
-            unmatched_hospitals.push_back(pair.first);
-            next_choices[pair.first] = 0;
-        }
-        for (auto pair : students)
-        {
-            student_matches[pair.first] = "";
-        }
-
-        // Keep checking while an unmatched hospital remains
-        // Basically iterates over the map until a full iteration
-        // passes without a new matching being necessary
-
-        while (!unmatched_hospitals.empty())
-        {
-            // Get next student preference
-
-            std::string hospital = unmatched_hospitals.front();
-            std::string student = hospitals[hospital][next_choices[hospital]];
-            next_choices[hospital]++;
-
-            // Match if student is free
-
-            if (student_matches[student].empty())
-            {
-                student_matches[student] = hospital;
-                unmatched_hospitals.erase(unmatched_hospitals.begin());
-            }
-
-            // If student is matched, check if they would prefer this hospital
-            // If they don't prefer it, nothing happens
-
-            else
-            {
-                std::string* prefs = students[student];
-                std::string prev_hospital = student_matches[student];
-                int prev_pref = -1;
-                int new_pref = -1;
-                for (int i = 0; i < count; i++)
-                {
-                    if (prefs[i] == hospital)
-                        new_pref = i;
-                    else if (prefs[i] == prev_hospital)
-                        prev_pref = i;
-                }
-                if (new_pref < prev_pref) // Lower preference is better
-                {
-                    student_matches[student] = hospital;
-                    unmatched_hospitals.erase(unmatched_hospitals.begin());
-                    unmatched_hospitals.push_back(prev_hospital);
-                }
-            }
-        }
-
-        // Convert matches dictionary to list format
-
-        auto output = new std::vector<Matching>;
-        for (auto pair : student_matches)
-        {
-            output->push_back(Matching{pair.first, pair.second});
-        }
-        return output;
-    }
-     */
-
 };
 
 // Verifier (done as a separate mode rather than a separate program. could be changed later)
@@ -352,18 +264,28 @@ static vector<pair<int,int>> readMatchingPairs(istream& in) {
 }
 
 int main(int argc, char** argv) {
+
     // arguments
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
     string mode = (argc >= 2 ? string(argv[1]) : "match");
+    string file1 = (argc >= 3 ? string(argv[2]) : "*");
+    string file2 = (argc >= 4 ? string(argv[3]) : "*");
+    bool timed_mode = (argc >= 5 && string(argv[4]) == "TIMED");
+
+    // start timer
+    auto begin = chrono::steady_clock::now();
 
     // match mode
     if (mode == "match") {
         Instance inst;
         string err;
 
-        if (!readInstance(cin, inst, err)) {
+        ifstream stream1;
+        if (file1 != "*")
+            stream1 = ifstream(file1);
+        if (!readInstance((file1 == "*") ? cin : stream1, inst, err)) {
             cout << "INVALID: " << err << "\n";
             return 0;
         }
@@ -386,8 +308,18 @@ int main(int argc, char** argv) {
 
         auto [hospToStud, proposals] = engine.solve();
 
+        ofstream stream2;
+        if (file2 != "*")
+            stream2 = ofstream{file2};
+        ostream& outputStream = (file2 == "*") ? cout : stream2;
         for (int h = 1; h <= inst.n; h++) {
-            cout << h << " " << hospToStud[h] << "\n";
+            outputStream << h << " " << hospToStud[h] << "\n";
+        }
+
+        // print time elapsed, if necessary
+        if (timed_mode) {
+            auto end = std::chrono::steady_clock::now();
+            cout << "Elapsed: " << chrono::duration_cast<chrono::microseconds>(end-begin).count() << " ns" << endl;
         }
 
         return 0;
@@ -397,52 +329,44 @@ int main(int argc, char** argv) {
     if (mode == "verify") {
         Instance inst;
         string err;
-        if (!readInstance(cin, inst, err)) {
+
+        // read either from input file or terminal
+        ifstream stream1;
+        if (file1 != "*")
+            stream1 = ifstream(file1);
+        if (!readInstance((file1 == "*") ? cin : stream1, inst, err)) {
             cout << "INVALID: " << err << "\n";
             return 0;
         }
-        auto pairs = readMatchingPairs(cin);
+
+        // read either from output file or terminal
+        ifstream stream2;
+        if (file2 != "*")
+            stream2 = ifstream(file2);
+        auto pairs = readMatchingPairs((file2 == "*") ? cin : stream2);
         cout << verifyMatching(inst, pairs) << "\n";
+        
+        // print time elapsed, if necessary
+        if (timed_mode) {
+            auto end = std::chrono::steady_clock::now();
+            cout << "Elapsed: " << chrono::duration_cast<chrono::microseconds>(end-begin).count() << " ns" << endl;
+        }
+        
         return 0;
     }
 
-
     // invalid mode
-    cerr << "Unknown mode: " << mode << "\n";
-    cerr << "PowerShell Usage:\n"
-        << "  Match:\n"
-        << "    Get-Content ..\\example.in | .\\AlgorithmAssignment1.exe match > ..\\example.out\n"
-        << "  Verify:\n"
-        << "    Get-Content .\\example.in, .\\example.out | & .\\cmake-build-debug-visual-studio\\AlgorithmAssignment1.exe verify\n\n"
-        << "cmd Usage:\n"
-        << "  Match:\n"
-        << "    AlgorithmAssignment1.exe match < ..\\example.in > ..\\example.out:\n"
-        << "  Verify:\n"
-        << "    copy /b ..\\example.in + ..\\example.out verify_input.txt:\n"
-        << "    AlgorithmAssignment1.exe verify < verify_input.txt\n\n"
+    cerr << "Unknown mode: " << mode << endl << endl;
+    cerr 
+        << "For testing in terminal:" << endl
+        << "  Match mode:" << endl
+        << "    ex. AlgorithmAssignment1.exe match .\\example.in .\\example.out" << endl
+        << "  Verify mode:" << endl
+        << "    ex. AlgorithmAssignment1.exe verify .\\example.in .\\example.out" << endl
+        << "" << endl
+        << "  Running without arguments defaults to `match * *`" << endl
+        << "  File arguments can be replaced with * to use terminal for input/output" << endl
+        << "  TIMED can be added as a final argument to time the code in ns" << endl
         ;
     return 1;
 }
-
-// Hardcoded testing
-/*
-int main()
-{
-
-MatchingEngine list(3);
-list.set_hospital_preferences("X", {"a", "b", "c"});
-list.set_hospital_preferences("Y", {"a", "b", "c"});
-list.set_hospital_preferences("Z", {"b", "c", "a"});
-list.set_student_preferences("a", {"Y", "X", "Z"});
-list.set_student_preferences("b", {"X", "Y", "Z"});
-list.set_student_preferences("c", {"X", "Y", "Z"});
-
-std::vector<Matching>* output = list.solve();
-for (Matching matching : *output)
-{
-    std::cout << matching.hospital << " -> " << matching.student << std::endl;
-}
-
-return 0;
-}
-*/
