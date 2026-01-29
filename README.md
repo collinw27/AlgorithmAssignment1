@@ -35,8 +35,8 @@ The input & output format matches the format provided in the assignment instruct
 
 The following graphs were constructed by running the match/verify engines 3 times and averaging the execution time in nanoseconds.
 
-![](/task3_1.png) \
-![](/task3_2.png)
+![](/scalability/match.png) \
+![](/scalability/verify.png)
 
 I notice that both the match and verify times grow as a function of n^2, where n is the input size. This is consistent with the fact that the worst-case time complexity
 of Gale-Shapley is O(n^2).
