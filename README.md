@@ -1,6 +1,6 @@
 # Algorithm Assignment 1
 
-Jordan Price \
+Jordan Price (UFID 77967971)
 Collin Williams (UFID 73358805)
 
 ## Compiling
